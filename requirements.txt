@@ -10,7 +10,6 @@ cryptography>=41.0.7
 zstandard>=0.22.0
 xmltodict>=0.13.0
 Pillow>=10.1.0
-yara-python>=4.3.2
 aiofiles>=23.2.1
 
 # 监控和通知
