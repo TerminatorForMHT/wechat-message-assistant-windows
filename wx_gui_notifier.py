@@ -136,6 +136,7 @@ class WeChatMonitorWorker(QObject):
         self.observer = None
         self.last_local_id = 0
         self.contact_map = {}
+        self.muted_set = set()
         self.wx_info = None
         self.key = None
         self.db_path = None
@@ -282,6 +283,19 @@ class WeChatMonitorWorker(QObject):
                 if name and uname:
                     # 存储 username -> name 的映射
                     self.contact_map[uname] = name
+            
+            # 加载「消息免打扰」会话集合（chat_room_notify != 0 表示免打扰）
+            try:
+                cursor.execute(
+                    "SELECT username FROM contact "
+                    "WHERE chat_room_notify IS NOT NULL AND chat_room_notify != 0"
+                )
+                for (mu,) in cursor.fetchall():
+                    if mu:
+                        self.muted_set.add(mu)
+                self.log(f"✓ 免打扰会话加载完成：{len(self.muted_set)} 个")
+            except Exception as mute_err:
+                self.log(f"⚠️ 未找到 chat_room_notify 字段，跳过免打扰过滤：{mute_err}")
             
             # 保存 cursor 用于后续查询
             self.contact_cursor = cursor
@@ -458,6 +472,11 @@ class WeChatMonitorWorker(QObject):
                     prev = self.prev_session_state[username]
                     if timestamp <= prev['timestamp']:
                         continue
+                
+                # 免打扰过滤：跳过被静音的会话（先更新状态避免重复判定）
+                if username in self.muted_set:
+                    self.prev_session_state[username] = {'timestamp': timestamp, 'msg_type': msg_type}
+                    continue
                 
                 # 获取聊天显示名称
                 display = self.contact_map.get(username, username)
@@ -688,6 +707,12 @@ class WeChatMonitorWorker(QObject):
                     if timestamp <= prev['timestamp']:
                         skip_count += 1
                         continue
+                
+                # 免打扰过滤：跳过被静音的会话（先更新状态避免重复判定）
+                if username in self.muted_set:
+                    self.prev_session_state[username] = {'timestamp': timestamp, 'msg_type': msg_type}
+                    skip_count += 1
+                    continue
                 
                 # 记录新消息
                 new_count += 1

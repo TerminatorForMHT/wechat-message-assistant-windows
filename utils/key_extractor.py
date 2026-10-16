@@ -8,12 +8,14 @@ import os
 import sys
 import time
 import re
+import struct
 import functools
 
 print = functools.partial(print, flush=True)
 
 from .key_scan_common import (
     collect_db_files, scan_memory_for_keys, cross_verify_keys, save_results,
+    verify_enc_key,
 )
 
 kernel32 = ctypes.windll.kernel32
@@ -76,6 +78,98 @@ def enum_regions(h):
     return regs
 
 
+# 微信 4.1+ 密钥提取：com.Tencent.WCDB.Config.Cipher 配置对象
+CONFIG_CIPHER_NAME = b"com.Tencent.WCDB.Config.Cipher"
+CONFIG_XOR_MASK = bytes.fromhex(
+    "d2c7442458020000004889442450488b450048844c2448488944254048584c24"
+)
+HEX_LITERAL_RE = re.compile(rb"[xX]'([0-9a-fA-F]{64,192})'")
+
+
+def _probable_key(b):
+    """快速排除明显非密钥的 32 字节序列。"""
+    return len(b) == 32 and len(set(b)) >= 15 and b not in (b"\x00" * 32, b"\xff" * 32)
+
+
+def _find_bytes(h, needle):
+    """在所有可读内存区域扫描 needle 字节，返回命中地址列表。"""
+    hits = []
+    for base, size in enum_regions(h):
+        data = read_mem(h, base, size)
+        if not data:
+            continue
+        pos = 0
+        while True:
+            pos = data.find(needle, pos)
+            if pos < 0:
+                break
+            hits.append(base + pos)
+            pos += 1
+    return hits
+
+
+def _extract_via_wcdb_config(h, db_files, salt_to_dbs, key_map, remaining_salts, print_fn):
+    """微信 4.1+ 主路径：扫描 com.Tencent.WCDB.Config.Cipher 配置对象。
+
+    字符串锚点 → [ptr][len] 结构回溯 → 数据块 XOR 掩码 → x'<64hex key>' 字面量，
+    候选派生密钥经 page1 HMAC 校验后填入 key_map。返回本次命中的密钥数。
+    """
+    needles = _find_bytes(h, CONFIG_CIPHER_NAME)
+    print_fn(f"  [WCDB] Config.Cipher 锚点: {len(needles)} 处")
+    if not needles:
+        return 0
+    pairs = [struct.pack("<Q", a) + struct.pack("<Q", len(CONFIG_CIPHER_NAME)) for a in needles]
+    tested = set()
+    found = 0
+    for pair in pairs:
+        for qaddr in _find_bytes(h, pair):
+            node = read_mem(h, qaddr - 0x10, 0x50)
+            if not node or len(node) < 0x40:
+                continue
+            if struct.unpack_from("<Q", node, 0x10)[0] not in needles:
+                continue
+            if struct.unpack_from("<Q", node, 0x18)[0] != len(CONFIG_CIPHER_NAME):
+                continue
+            config_ptr = struct.unpack_from("<Q", node, 0x28)[0]
+            if not (0x10000 <= config_ptr < 0x800000000000):
+                continue
+            obj = read_mem(h, config_ptr + 0x88, 0x28)
+            if not obj or len(obj) < 0x18:
+                continue
+            data_ptr = struct.unpack_from("<Q", obj, 0x8)[0]
+            data_len = struct.unpack_from("<Q", obj, 0x10)[0]
+            if not (0 < data_len <= 1024 and 0x10000 <= data_ptr < 0x800000000000):
+                continue
+            blob = read_mem(h, data_ptr, data_len)
+            if not blob or len(blob) != data_len:
+                continue
+            decoded = bytes(v ^ CONFIG_XOR_MASK[i % len(CONFIG_XOR_MASK)] for i, v in enumerate(blob))
+            for m in HEX_LITERAL_RE.finditer(decoded):
+                run = m.group(1).decode().lower()
+                starts = [0]
+                if len(run) > 96:
+                    starts += list(range(0, len(run) - 63, 32))
+                    starts.append(len(run) - 64)
+                for s in dict.fromkeys(starts):
+                    if s + 64 > len(run):
+                        continue
+                    cand = bytes.fromhex(run[s:s + 64])
+                    if cand in tested or not _probable_key(cand):
+                        continue
+                    tested.add(cand)
+                    for rel, path, sz, salt_hex, page1 in db_files:
+                        if salt_hex in key_map:
+                            continue
+                        if verify_enc_key(cand, page1):
+                            key_map[salt_hex] = cand.hex()
+                            remaining_salts.discard(salt_hex)
+                            print_fn(f"  [WCDB FOUND] salt={salt_hex}")
+                            print_fn(f"    enc_key={cand.hex()}")
+                            print_fn(f"    数据库：{', '.join(salt_to_dbs[salt_hex])}")
+                            found += 1
+    return found
+
+
 def extract_keys_windows(db_dir: str, out_file: str):
     """提取微信数据库密钥的主函数
     
@@ -110,30 +204,38 @@ def extract_keys_windows(db_dir: str, out_file: str):
             continue
 
         try:
-            regions = enum_regions(h)
-            total_bytes = sum(s for _, s in regions)
-            total_mb = total_bytes / 1024 / 1024
-            print(f"\n[*] 扫描 PID={pid} ({total_mb:.0f}MB, {len(regions)} 区域)")
+            print(f"\n[*] 扫描 PID={pid}")
 
-            scanned_bytes = 0
-            for reg_idx, (base, size) in enumerate(regions):
-                data = read_mem(h, base, size)
-                scanned_bytes += size
-                if not data:
-                    continue
+            # 4.1+ 主路径：WCDB Config.Cipher 配置对象扫描
+            found = _extract_via_wcdb_config(h, db_files, salt_to_dbs, key_map, remaining_salts, print)
+            print(f"  [WCDB] PID={pid} 提取到 {found} 个密钥（累计 {len(key_map)}/{len(salt_to_dbs)}）")
 
-                all_hex_matches += scan_memory_for_keys(
-                    data, hex_re, db_files, salt_to_dbs,
-                    key_map, remaining_salts, base, pid, print,
-                )
+            if remaining_salts:
+                # 回退：旧版 x'-hex 内存扫描（≤4.0 版本）
+                regions = enum_regions(h)
+                total_bytes = sum(s for _, s in regions)
+                total_mb = total_bytes / 1024 / 1024
+                print(f"  [fallback] 剩余 {len(remaining_salts)} 盐，老版 hex 扫描 ({total_mb:.0f}MB, {len(regions)} 区域)")
 
-                if (reg_idx + 1) % 200 == 0:
-                    elapsed = time.time() - t0
-                    progress = scanned_bytes / total_bytes * 100 if total_bytes else 100
-                    print(
-                        f"  [{progress:.1f}%] {len(key_map)}/{len(salt_to_dbs)} salts matched, "
-                        f"{all_hex_matches} hex patterns, {elapsed:.1f}s"
+                scanned_bytes = 0
+                for reg_idx, (base, size) in enumerate(regions):
+                    data = read_mem(h, base, size)
+                    scanned_bytes += size
+                    if not data:
+                        continue
+
+                    all_hex_matches += scan_memory_for_keys(
+                        data, hex_re, db_files, salt_to_dbs,
+                        key_map, remaining_salts, base, pid, print,
                     )
+
+                    if (reg_idx + 1) % 200 == 0:
+                        elapsed = time.time() - t0
+                        progress = scanned_bytes / total_bytes * 100 if total_bytes else 100
+                        print(
+                            f"  [{progress:.1f}%] {len(key_map)}/{len(salt_to_dbs)} salts matched, "
+                            f"{all_hex_matches} hex patterns, {elapsed:.1f}s"
+                        )
         finally:
             kernel32.CloseHandle(h)
 
