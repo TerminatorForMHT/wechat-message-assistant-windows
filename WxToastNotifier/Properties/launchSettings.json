@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "WxToastNotifier (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "WxToastNotifier (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

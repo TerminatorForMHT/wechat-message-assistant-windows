@@ -1,0 +1,53 @@
+<Page
+    x:Class="WxToastNotifier.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:WxToastNotifier"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="12">
+
+            <TextBlock Text="微信消息 → 系统 Toast 通知" Style="{StaticResource TitleTextBlockStyle}" />
+            <TextBlock Text="非侵入式读取微信会话（仅解密数据库副本到临时目录），免打扰会话不推送。"
+                       TextWrapping="Wrap" Opacity="0.7" />
+
+            <TextBlock Text="数据库目录 (db_storage)" Style="{StaticResource BaseTextBlockStyle}" />
+            <TextBox x:Name="DbStorageBox"
+                     PlaceholderText="…\xwechat_files\&lt;wxid&gt;\db_storage" />
+
+            <TextBlock Text="passphrase（可选，64 位 hex）" />
+            <PasswordBox x:Name="PassphraseBox"
+                         PlaceholderText="微信 4.1+ passphrase" />
+
+            <TextBlock Text="keysFile（可选，all_keys.json 路径）" />
+            <TextBox x:Name="KeysFileBox"
+                     PlaceholderText="留空则用 passphrase 派生" />
+
+            <TextBlock Text="轮询间隔（秒）" />
+            <TextBox x:Name="IntervalBox" Text="2" />
+
+            <TextBlock Text="免打扰列名（可选，自动探测失败时手动指定）" />
+            <TextBox x:Name="MuteColumnBox" PlaceholderText="自动探测" />
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button x:Name="SaveButton" Content="保存配置" Click="SaveButton_Click" />
+                <Button x:Name="StartButton" Content="开始监听"
+                        Style="{StaticResource AccentButtonStyle}" Click="StartButton_Click" />
+                <Button x:Name="StopButton" Content="停止" Click="StopButton_Click" />
+            </StackPanel>
+
+            <TextBlock Text="日志" Style="{StaticResource SubtitleTextBlockStyle}" />
+            <Border BorderThickness="1" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    CornerRadius="4" Padding="8">
+                <ScrollViewer Height="280">
+                    <TextBlock x:Name="LogText" TextWrapping="Wrap"
+                               FontFamily="Consolas" FontSize="12" />
+                </ScrollViewer>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</Page>
