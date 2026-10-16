@@ -55,6 +55,7 @@ installer_output/
 WxToastNotifier/bin/
 WxToastNotifier/obj/
 *.user
+*.pfx
 .vs/
 
 # ��־�ļ�

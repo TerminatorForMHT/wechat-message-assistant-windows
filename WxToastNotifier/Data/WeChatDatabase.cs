@@ -213,6 +213,50 @@ public sealed class WeChatDatabase
         return result;
     }
 
+    /// <summary>
+    /// 读取当前账户的「微信号」(contact.alias)，为空则退化为「昵称」(nick_name)，再无则返回 null。
+    /// db_storage 所在目录名形如 wxid_xxx_后缀，去掉最后一个下划线后缀即为 contact 表中的 username。
+    /// </summary>
+    public string? ReadSelfDisplayName()
+    {
+        string path;
+        try { path = DecryptToTemp(ContactDb); }
+        catch (Exception) { return null; }
+
+        var dirName = Path.GetFileName(Path.GetDirectoryName(_dbStorage.TrimEnd('\\', '/')));
+        if (string.IsNullOrEmpty(dirName)) return null;
+
+        using var conn = OpenReadOnly(path);
+
+        var lastUnderscore = dirName.LastIndexOf('_');
+        var candidates = lastUnderscore > 0
+            ? new[] { dirName[..lastUnderscore], dirName }
+            : new[] { dirName };
+
+        foreach (var username in candidates)
+        {
+            var display = QuerySelfDisplay(conn, username);
+            if (display != null) return display;
+        }
+        return null;
+    }
+
+    private static string? QuerySelfDisplay(SqliteConnection conn, string username)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT alias, nick_name FROM contact WHERE username = @u LIMIT 1";
+        cmd.Parameters.AddWithValue("@u", username);
+        using var r = cmd.ExecuteReader();
+        if (!r.Read()) return null;
+
+        var alias = r.IsDBNull(0) ? "" : r.GetString(0);
+        var nick = r.IsDBNull(1) ? "" : r.GetString(1);
+
+        return !string.IsNullOrWhiteSpace(alias) ? alias
+            : !string.IsNullOrWhiteSpace(nick) ? nick
+            : null;
+    }
+
     private static string Md5Hex(string s)
     {
         var hash = System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(s));

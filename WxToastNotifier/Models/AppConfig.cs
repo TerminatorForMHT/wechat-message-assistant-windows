@@ -41,6 +41,10 @@ public sealed class AppConfig
         }));
     }
 
+    /// <summary>
+    /// 自动定位微信 db_storage。多账户（多个 wxid_* 目录）时，选 db 最近写入时间
+    /// 最新的那个（当前登录账户的库会持续写入，历史账户的库时间戳停留在早期）。
+    /// </summary>
     public static string TryAutoDetectDbStorage()
     {
         var docRoot = Path.Combine(
@@ -48,13 +52,33 @@ public sealed class AppConfig
             "xwechat_files");
         if (!Directory.Exists(docRoot)) return "";
 
+        string? best = null;
+        var bestTime = DateTime.MinValue;
+
         foreach (var wxidDir in Directory.EnumerateDirectories(docRoot))
         {
             var db = Path.Combine(wxidDir, "db_storage");
-            if (Directory.Exists(db) &&
-                Directory.EnumerateFiles(db, "*.db", SearchOption.AllDirectories).Any())
-                return db;
+            if (!Directory.Exists(db)) continue;
+
+            var latest = DateTime.MinValue;
+            try
+            {
+                latest = Directory.EnumerateFiles(db, "*.db", SearchOption.AllDirectories)
+                    .Select(f => { try { return File.GetLastWriteTime(f); } catch { return DateTime.MinValue; } })
+                    .DefaultIfEmpty(DateTime.MinValue)
+                    .Max();
+            }
+            catch (Exception)
+            {
+                continue;
+            }
+
+            if (latest > bestTime)
+            {
+                bestTime = latest;
+                best = db;
+            }
         }
-        return "";
+        return best ?? "";
     }
 }

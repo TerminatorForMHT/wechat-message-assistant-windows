@@ -48,14 +48,60 @@ public sealed partial class MainPage : Page
             }
         }
 
+        ShowCurrentAccount();
+        UpdateWeChatStatus();
+
         if (string.IsNullOrWhiteSpace(KeysFileBox.Text) && string.IsNullOrWhiteSpace(PassphraseBox.Password))
         {
             Log("ℹ️ 未配置密钥：启动时将自动从微信进程内存提取（4.1+ WCDB，无需 passphrase/keysFile）");
         }
+    }
 
-        // 临时自动开始监听（实测用）
-        Log("ℹ️ 自动开始监听…");
-        DispatcherQueue.TryEnqueue(() => StartButton_Click(this, new RoutedEventArgs()));
+    private void ShowCurrentAccount()
+    {
+        var wxid = Path.GetFileName(Path.GetDirectoryName(DbStorageBox.Text.Trim()));
+        if (string.IsNullOrEmpty(wxid)) return;
+
+        AccountText.Text = "当前账户：" + wxid;
+        AccountText.Visibility = Visibility.Visible;
+    }
+
+    private async Task UpdateAccountDisplayAsync(WeChatDatabase db)
+    {
+        try
+        {
+            var selfName = await Task.Run(() => db.ReadSelfDisplayName());
+            if (string.IsNullOrWhiteSpace(selfName)) return;
+
+            AccountText.Text = "当前账户：" + selfName;
+            AccountText.Visibility = Visibility.Visible;
+            Log($"✓ 当前账户：{selfName}");
+        }
+        catch (Exception ex)
+        {
+            Log("读取当前账户信息失败：" + ex.Message);
+        }
+    }
+
+    private void UpdateWeChatStatus()
+    {
+        var running = WeChatProcessService.IsRunning();
+        WeChatStatusText.Text = running ? "✓ 微信已运行" : "⚠️ 微信未启动";
+        OpenWeChatButton.Visibility = running ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void OpenWeChatButton_Click(object sender, RoutedEventArgs e)
+    {
+        Log("正在启动微信…");
+        if (WeChatProcessService.Launch())
+        {
+            Log("✓ 已拉起微信，登录后点击「开始监听」即可");
+        }
+        else
+        {
+            Log("❌ 未找到微信安装路径，请手动启动微信");
+        }
+        UpdateWeChatStatus();
     }
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)
@@ -94,6 +140,9 @@ public sealed partial class MainPage : Page
             }
 
             var db = new WeChatDatabase(_config.DbStorage, keys, _config);
+
+            await UpdateAccountDisplayAsync(db);
+
             _toast = new ToastService();
             _monitor = new MessageMonitor(db, _toast, Log, _config.PollIntervalSeconds);
             _monitor.NewMessage += _ => { /* 通知已在 Monitor 内推送并记录 */ };

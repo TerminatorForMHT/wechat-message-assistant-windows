@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
@@ -11,14 +11,14 @@
 
   <Identity
     Name="6CA725C1-33CD-47A4-8B82-83753F2478B2"
-    Publisher="CN=AppPublisher"
-    Version="1.0.0.0" />
+    Publisher="CN=WxToastNotifier"
+    Version="2.0.0.0" />
 
   <mp:PhoneIdentity PhoneProductId="6CA725C1-33CD-47A4-8B82-83753F2478B2" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
     <DisplayName>WxToastNotifier</DisplayName>
-    <PublisherDisplayName>AppPublisher</PublisherDisplayName>
+    <PublisherDisplayName>WxToastNotifier</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
     <uap10:PackageIntegrity>
       <uap10:Content Enforcement="on"/>

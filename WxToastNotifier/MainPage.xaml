@@ -14,9 +14,19 @@
             <TextBlock Text="非侵入式读取微信会话（仅解密数据库副本到临时目录），免打扰会话不推送。"
                        TextWrapping="Wrap" Opacity="0.7" />
 
+            <StackPanel x:Name="WeChatStatusPanel" Orientation="Horizontal" Spacing="8">
+                <TextBlock x:Name="WeChatStatusText" Text="正在检测微信运行状态…"
+                           VerticalAlignment="Center" />
+                <Button x:Name="OpenWeChatButton" Content="打开微信"
+                        Style="{StaticResource AccentButtonStyle}"
+                        Visibility="Collapsed" Click="OpenWeChatButton_Click" />
+            </StackPanel>
+
             <TextBlock Text="数据库目录 (db_storage)" Style="{StaticResource BaseTextBlockStyle}" />
             <TextBox x:Name="DbStorageBox"
                      PlaceholderText="…\xwechat_files\&lt;wxid&gt;\db_storage" />
+            <TextBlock x:Name="AccountText" Text="当前账户：—"
+                       Opacity="0.7" Visibility="Collapsed" />
 
             <TextBlock Text="passphrase（可选回退，64 位 hex）" />
             <PasswordBox x:Name="PassphraseBox"
