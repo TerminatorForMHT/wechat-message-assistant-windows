@@ -43,9 +43,7 @@ public sealed class MessageMonitor
 
             _db.IntrospectSchema();
             var muteCol = _db.MuteColumn;
-            _log(muteCol is null
-                ? "⚠️ 未识别到免打扰标记列（将推送所有会话），如需过滤请在 config.json 中设置 MuteColumn"
-                : $"✓ 免打扰标记列：{muteCol}");
+            _log($"✓ 免打扰标记列：{muteCol}（contact 表，0=正常，1=免打扰）");
             _log($"会话表列：{string.Join(", ", _db.SessionColumns)}");
 
             _contacts = _db.ReadContacts();

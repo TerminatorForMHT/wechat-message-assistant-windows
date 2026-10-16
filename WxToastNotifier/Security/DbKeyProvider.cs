@@ -30,16 +30,31 @@ public static class DbKeyProvider
         return result;
     }
 
-    public static KeySet Resolve(string dbStorage, AppConfig config)
+    public static KeySet Resolve(string dbStorage, AppConfig config, Action<string>? log = null)
     {
         var dbs = CollectDbFiles(dbStorage);
         var result = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
 
+        // 1. 微信 4.1+ 主路径：WCDB Config.Cipher 内存扫描（无需 passphrase / 密钥文件）
+        try
+        {
+            var scanned = WeChatKeyExtractor.Extract(dbStorage, log);
+            foreach (var (rel, key) in scanned)
+                result[rel] = key;
+        }
+        catch (Exception ex)
+        {
+            log?.Invoke($"⚠️ 内存扫描失败：{ex.Message}");
+        }
+
+        // 2. 剩余数据库用既有 all_keys.json 补齐
         if (!string.IsNullOrWhiteSpace(config.KeysFile) && File.Exists(config.KeysFile))
         {
             LoadFromKeysJson(config.KeysFile, dbs, result);
         }
-        else if (!string.IsNullOrWhiteSpace(config.Passphrase))
+
+        // 3. 剩余数据库用 passphrase 派生（旧版微信回退路径）
+        if (!string.IsNullOrWhiteSpace(config.Passphrase))
         {
             LoadFromPassphrase(dbStorage, config.Passphrase, dbs, result);
         }
@@ -54,6 +69,7 @@ public static class DbKeyProvider
 
         foreach (var rel in dbs)
         {
+            if (result.ContainsKey(rel)) continue;
             if (!root.TryGetProperty(rel, out var entry)) continue;
             var encKeyHex = entry.TryGetProperty("enc_key", out var k) ? k.GetString() : null;
             if (string.IsNullOrEmpty(encKeyHex)) continue;
@@ -72,6 +88,8 @@ public static class DbKeyProvider
 
         foreach (var rel in dbs)
         {
+            if (result.ContainsKey(rel)) continue;
+
             var fullPath = Path.Combine(dbStorage, rel);
             var salt = WeChatCrypto.ReadSalt(fullPath);
             if (salt.Length != WeChatCrypto.SaltSize) continue;

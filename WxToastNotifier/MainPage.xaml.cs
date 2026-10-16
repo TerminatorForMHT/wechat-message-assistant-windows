@@ -50,7 +50,7 @@ public sealed partial class MainPage : Page
 
         if (string.IsNullOrWhiteSpace(KeysFileBox.Text) && string.IsNullOrWhiteSpace(PassphraseBox.Password))
         {
-            Log("⚠️ 尚未配置密钥：请提供 passphrase，或用 Python 端提取 all_keys.json 后填写 keysFile");
+            Log("ℹ️ 未配置密钥：启动时将自动从微信进程内存提取（4.1+ WCDB，无需 passphrase/keysFile）");
         }
     }
 
@@ -61,8 +61,9 @@ public sealed partial class MainPage : Page
         Log("✓ 配置已保存");
     }
 
-    private void StartButton_Click(object sender, RoutedEventArgs e)
+    private async void StartButton_Click(object sender, RoutedEventArgs e)
     {
+        StartButton.IsEnabled = false;
         try
         {
             _config = BuildConfigFromUi();
@@ -79,8 +80,14 @@ public sealed partial class MainPage : Page
                 return;
             }
 
-            var keys = DbKeyProvider.Resolve(_config.DbStorage, _config);
+            // 密钥解析含内存扫描，放到后台线程避免阻塞 UI
+            var keys = await Task.Run(() => DbKeyProvider.Resolve(_config.DbStorage, _config, Log));
             Log($"✓ 解析到 {keys.KeysByRelPath.Count} 个数据库密钥");
+            if (keys.KeysByRelPath.Count == 0)
+            {
+                Log("❌ 未解析到任何数据库密钥（请确认微信已登录运行）");
+                return;
+            }
 
             var db = new WeChatDatabase(_config.DbStorage, keys, _config);
             _toast = new ToastService();
@@ -91,6 +98,10 @@ public sealed partial class MainPage : Page
         catch (Exception ex)
         {
             Log("❌ 启动失败：" + ex.Message);
+        }
+        finally
+        {
+            StartButton.IsEnabled = true;
         }
     }
 

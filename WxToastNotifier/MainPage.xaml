@@ -18,13 +18,13 @@
             <TextBox x:Name="DbStorageBox"
                      PlaceholderText="…\xwechat_files\&lt;wxid&gt;\db_storage" />
 
-            <TextBlock Text="passphrase（可选，64 位 hex）" />
+            <TextBlock Text="passphrase（可选回退，64 位 hex）" />
             <PasswordBox x:Name="PassphraseBox"
-                         PlaceholderText="微信 4.1+ passphrase" />
+                         PlaceholderText="微信 4.1+ passphrase（可留空，自动内存提取）" />
 
-            <TextBlock Text="keysFile（可选，all_keys.json 路径）" />
+            <TextBlock Text="keysFile（可选回退，all_keys.json 路径）" />
             <TextBox x:Name="KeysFileBox"
-                     PlaceholderText="留空则用 passphrase 派生" />
+                     PlaceholderText="留空则自动从微信内存提取密钥" />
 
             <TextBlock Text="轮询间隔（秒）" />
             <TextBox x:Name="IntervalBox" Text="2" />

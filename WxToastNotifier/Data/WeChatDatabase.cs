@@ -13,11 +13,8 @@ public sealed class WeChatDatabase
     public const string SessionDb = @"session\session.db";
     public const string ContactDb = @"contact\contact.db";
 
-    private static readonly string[] MuteHints =
-    {
-        "mute", "muted", "is_mute", "disturb", "silent", "noremind",
-        "notify", "notify_status", "msg_notify", "remind", "quiet"
-    };
+    /// <summary>contact 表中已确认的消息免打扰标记列（0=正常，1=免打扰）。</summary>
+    public const string MuteColumnName = "chat_room_notify";
 
     private readonly string _dbStorage;
     private readonly KeySet _keys;
@@ -39,8 +36,8 @@ public sealed class WeChatDatabase
     /// <summary>联系人表列名。</summary>
     public IReadOnlyList<string> ContactColumns { get; private set; } = Array.Empty<string>();
 
-    /// <summary>已探测到的免打扰标记列（可能为 null，表示未识别）。</summary>
-    public string? MuteColumn { get; private set; }
+    /// <summary>免打扰标记列（默认 contact.chat_room_notify，可用 config.MuteColumn 覆盖）。</summary>
+    public string MuteColumn { get; private set; } = MuteColumnName;
 
     /// <summary>会话表建表 SQL（用于人工核对免打扰字段）。</summary>
     public string? SessionTableSql { get; private set; }
@@ -115,22 +112,28 @@ public sealed class WeChatDatabase
         return result;
     }
 
-    /// <summary>读取会话免打扰标记（username → 是否免打扰）。</summary>
+    /// <summary>读取会话免打扰标记（username → 是否免打扰），来自 contact 表。</summary>
     public Dictionary<string, bool> ReadMuteFlags()
     {
         var result = new Dictionary<string, bool>(StringComparer.Ordinal);
-        if (string.IsNullOrEmpty(MuteColumn)) return result;
-
-        var path = DecryptToTemp(SessionDb);
-        using var conn = OpenReadOnly(path);
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT username, \"{MuteColumn}\" FROM SessionTable";
-        using var r = cmd.ExecuteReader();
-        while (r.Read())
+        var muteCol = MuteColumn;
+        try
         {
-            var name = GetString(r, "username");
-            if (string.IsNullOrEmpty(name)) continue;
-            result[name] = IntToBool(GetInt32(r, MuteColumn));
+            var path = DecryptToTemp(ContactDb);
+            using var conn = OpenReadOnly(path);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"SELECT username, \"{muteCol}\" FROM contact WHERE \"{muteCol}\" IS NOT NULL";
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                var name = GetString(r, "username");
+                if (string.IsNullOrEmpty(name)) continue;
+                result[name] = IntToBool(GetInt32(r, muteCol));
+            }
+        }
+        catch (Exception)
+        {
+            // contact.db 或免打扰列不可用时，退回推送所有会话
         }
         return result;
     }
@@ -160,22 +163,11 @@ public sealed class WeChatDatabase
         return result;
     }
 
-    private string? DetectMuteColumn()
+    private string DetectMuteColumn()
     {
         if (!string.IsNullOrWhiteSpace(_config.MuteColumn))
             return _config.MuteColumn;
-
-        foreach (var col in SessionColumns)
-        {
-            if (MuteHints.Any(h => col.IndexOf(h, StringComparison.OrdinalIgnoreCase) >= 0))
-                return col;
-        }
-        foreach (var col in ContactColumns)
-        {
-            if (MuteHints.Any(h => col.IndexOf(h, StringComparison.OrdinalIgnoreCase) >= 0))
-                return col;
-        }
-        return null;
+        return MuteColumnName;
     }
 
     private static bool IntToBool(int v) => v != 0;
