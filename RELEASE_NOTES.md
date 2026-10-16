@@ -24,11 +24,14 @@
 
 本版本使用**自签名证书**打包为 MSIX，首次安装前需先信任证书：
 
-1. 双击 `WxToastNotifier.cer` 安装证书，选择「本地计算机」→「受信任的根证书颁发机构」。
-   - 或管理员 PowerShell 导入：
-     ```powershell
-     Import-Certificate -FilePath .\WxToastNotifier.cer -CertStoreLocation Cert:\LocalMachine\Root
-     ```
+1. （管理员）把证书装到「本地计算机」的「受信任的根证书颁发机构」——**必须是机器级**，装到「当前用户」会导致安装报错 `0x800B0109`：
+   ```powershell
+   # 方式一（推荐，最简单）：
+   certutil -addstore -f Root .\WxToastNotifier.cer
+   # 方式二：
+   Import-Certificate -FilePath .\WxToastNotifier.cer -CertStoreLocation Cert:\LocalMachine\Root
+   ```
+   或双击 `WxToastNotifier.cer` → 存储位置选「本地计算机」→ 选「将所有证书放入下列存储」→ 浏览到「受信任的根证书颁发机构」。
 2. 双击 `WxToastNotifier_2.0.0.0_x64.msix` 安装，或：
    ```powershell
    Add-AppxPackage -Path .\WxToastNotifier_2.0.0.0_x64.msix
