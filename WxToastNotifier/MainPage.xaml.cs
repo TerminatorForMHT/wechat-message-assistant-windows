@@ -32,7 +32,7 @@ public sealed partial class MainPage : Page
         IntervalBox.Text = _config.PollIntervalSeconds.ToString();
         MuteColumnBox.Text = _config.MuteColumn ?? "";
 
-        Log("配置已加载自 " + Path.Combine(AppContext.BaseDirectory, "config.json"));
+        Log("配置已加载自 " + AppConfig.GetDefaultConfigPath());
 
         if (string.IsNullOrWhiteSpace(DbStorageBox.Text))
         {

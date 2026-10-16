@@ -21,24 +21,28 @@ public sealed class AppConfig
     /// <summary>免打扰标记列名（若自动探测失败可手动覆盖）。</summary>
     public string? MuteColumn { get; set; }
 
+    public static string GetDefaultConfigPath() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "WxToastNotifier",
+        "config.json");
+
     public static AppConfig Load(string? path = null)
     {
-        path ??= Path.Combine(AppContext.BaseDirectory, "config.json");
+        path ??= GetDefaultConfigPath();
         if (File.Exists(path))
         {
             var json = File.ReadAllText(path);
-            return JsonSerializer.Deserialize<AppConfig>(json) ?? new AppConfig();
+            return JsonSerializer.Deserialize(json, AppConfigJsonContext.Default.AppConfig) ?? new AppConfig();
         }
         return new AppConfig();
     }
 
     public void Save(string? path = null)
     {
-        path ??= Path.Combine(AppContext.BaseDirectory, "config.json");
-        File.WriteAllText(path, JsonSerializer.Serialize(this, new JsonSerializerOptions
-        {
-            WriteIndented = true
-        }));
+        path ??= GetDefaultConfigPath();
+        var dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        File.WriteAllText(path, JsonSerializer.Serialize(this, AppConfigJsonContext.Default.AppConfig));
     }
 
     /// <summary>
@@ -81,4 +85,10 @@ public sealed class AppConfig
         }
         return best ?? "";
     }
+}
+
+[JsonSourceGenerationOptions(WriteIndented = true)]
+[JsonSerializable(typeof(AppConfig))]
+internal partial class AppConfigJsonContext : JsonSerializerContext
+{
 }
