@@ -16,6 +16,15 @@ public sealed class WeChatDatabase
     /// <summary>contact 表中已确认的消息免打扰标记列（0=正常，1=免打扰）。</summary>
     public const string MuteColumnName = "chat_room_notify";
 
+    /// <summary>消息库（含各会话的 Msg_&lt;md5&gt; 表）。</summary>
+    public const string MessageDb = @"message\message_0.db";
+
+    /// <summary>real_sender_id 等于该值表示「自己发出的消息」。</summary>
+    public const long SelfSenderId = 2;
+
+    /// <summary>单聊消息免打扰位：contact.flag 的第 9 位（0x200）置位表示免打扰。群聊免打扰走 chat_room_notify 列。</summary>
+    public const long MuteFlagBit = 0x200;
+
     private readonly string _dbStorage;
     private readonly KeySet _keys;
     private readonly AppConfig _config;
@@ -122,13 +131,14 @@ public sealed class WeChatDatabase
             var path = DecryptToTemp(ContactDb);
             using var conn = OpenReadOnly(path);
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = $"SELECT username, \"{muteCol}\" FROM contact WHERE \"{muteCol}\" IS NOT NULL";
+            cmd.CommandText = $"SELECT username, \"{muteCol}\", flag FROM contact";
             using var r = cmd.ExecuteReader();
             while (r.Read())
             {
                 var name = GetString(r, "username");
                 if (string.IsNullOrEmpty(name)) continue;
-                result[name] = IntToBool(GetInt32(r, muteCol));
+                // 群聊免打扰看 chat_room_notify 列；单聊免打扰看 flag 的第 9 位（0x200）
+                result[name] = IntToBool(GetInt32(r, muteCol)) || (GetInt64(r, "flag") & MuteFlagBit) != 0;
             }
         }
         catch (Exception)
@@ -170,11 +180,50 @@ public sealed class WeChatDatabase
         return MuteColumnName;
     }
 
+    /// <summary>
+    /// 判断给定会话「最新一条消息」是否由自己发出（message_0.db 的 real_sender_id == SelfSenderId）。
+    /// 仅在新消息出现时调用，避免每轮轮询都解密消息库。
+    /// </summary>
+    public Dictionary<string, bool> ReadSelfSenderLatest(IReadOnlyCollection<string> usernames)
+    {
+        var result = new Dictionary<string, bool>(StringComparer.Ordinal);
+        if (usernames.Count == 0) return result;
+
+        string path;
+        try { path = DecryptToTemp(MessageDb); }
+        catch (Exception) { return result; }
+
+        using var conn = OpenReadOnly(path);
+        foreach (var uname in usernames)
+        {
+            if (string.IsNullOrEmpty(uname)) continue;
+            result[uname] = false;
+            try
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = $"SELECT real_sender_id FROM \"Msg_{Md5Hex(uname)}\" ORDER BY rowid DESC LIMIT 1";
+                var v = cmd.ExecuteScalar();
+                result[uname] = v != null && Convert.ToInt64(v) == SelfSenderId;
+            }
+            catch (Exception)
+            {
+                // 表不存在或结构异常时，默认视为非 self（不误过滤对方消息）
+            }
+        }
+        return result;
+    }
+
+    private static string Md5Hex(string s)
+    {
+        var hash = System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(s));
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
     private static bool IntToBool(int v) => v != 0;
 
     private static SqliteConnection OpenReadOnly(string path)
     {
-        var conn = new SqliteConnection($"Data Source={path};Mode=ReadOnly");
+        var conn = new SqliteConnection($"Data Source={path};Mode=ReadOnly;Pooling=False");
         conn.Open();
         return conn;
     }

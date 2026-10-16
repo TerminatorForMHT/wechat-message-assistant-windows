@@ -222,7 +222,7 @@ public static class WeChatKeyExtractor
             if (full.EndsWith("-wal") || full.EndsWith("-shm")) continue;
             if (new FileInfo(full).Length < WeChatCrypto.PageSize) continue;
 
-            using var fs = File.OpenRead(full);
+            using var fs = WeChatCrypto.OpenReadShared(full);
             var page1 = new byte[WeChatCrypto.PageSize];
             int n = fs.Read(page1, 0, WeChatCrypto.PageSize);
             if (n < WeChatCrypto.SaltSize) continue;

@@ -102,7 +102,9 @@ public static class DbKeyProvider
             }
 
             var encKey = WeChatCrypto.DeriveEncKey(passphraseBytes, salt);
-            var page1 = File.ReadAllBytes(fullPath).AsSpan(0, WeChatCrypto.PageSize).ToArray();
+            var page1 = new byte[WeChatCrypto.PageSize];
+            using (var fs = WeChatCrypto.OpenReadShared(fullPath))
+                fs.ReadExactly(page1, 0, WeChatCrypto.PageSize);
             if (WeChatCrypto.VerifyKey(encKey, page1))
             {
                 keyBySalt[saltHex] = encKey;

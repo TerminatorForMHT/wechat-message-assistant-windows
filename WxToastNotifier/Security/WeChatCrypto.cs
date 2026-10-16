@@ -20,6 +20,14 @@ public static class WeChatCrypto
     private static readonly byte[] SqliteHeader = Encoding.ASCII.GetBytes("SQLite format 3\0");
 
     /// <summary>
+    /// 以共享读写方式只读打开微信数据库文件。
+    /// 微信进程持有写句柄，.NET 默认 FileShare.Read 会因共享冲突失败；
+    /// 必须显式允许 ReadWrite | Delete 才能与微信句柄共存（等价 Python 的 open(path,'rb')）。
+    /// </summary>
+    public static FileStream OpenReadShared(string path)
+        => new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
+    /// <summary>
     /// 由 4.1+ 的 passphrase（32 字节）+ 数据库文件前 16 字节 salt 派生 enc_key。
     /// PBKDF2-HMAC-SHA512(passphrase, salt, 256000, dklen=32)。
     /// </summary>
@@ -52,7 +60,7 @@ public static class WeChatCrypto
     /// <summary>读取数据库文件前 16 字节作为 salt。</summary>
     public static byte[] ReadSalt(string dbPath)
     {
-        using var fs = File.OpenRead(dbPath);
+        using var fs = OpenReadShared(dbPath);
         var salt = new byte[SaltSize];
         int n = fs.Read(salt.AsSpan());
         return n == SaltSize ? salt : Array.Empty<byte>();
@@ -95,8 +103,9 @@ public static class WeChatCrypto
 
         Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
 
-        using var fin = File.OpenRead(dbPath);
-        using var fout = File.Create(outPath);
+        using var fin = OpenReadShared(dbPath);
+        using var fout = new FileStream(outPath, FileMode.Create, FileAccess.Write,
+            FileShare.ReadWrite | FileShare.Delete);
         var buf = new byte[PageSize];
 
         for (int pgno = 1; pgno <= totalPages; pgno++)
@@ -126,13 +135,14 @@ public static class WeChatCrypto
         const int frameSize = WalFrameHeaderSize + PageSize; // 24 + 4096 = 4120
         int patched = 0;
 
-        using var wf = File.OpenRead(walPath);
+        using var wf = OpenReadShared(walPath);
         byte[] walHdr = new byte[WalHeaderSize];
         ReadFull(wf, walHdr, WalHeaderSize);
         uint walSalt1 = ReadUInt32BigEndian(walHdr, 16);
         uint walSalt2 = ReadUInt32BigEndian(walHdr, 20);
 
-        using var df = File.Open(decryptedDbPath, FileMode.Open, FileAccess.ReadWrite);
+        using var df = new FileStream(decryptedDbPath, FileMode.Open, FileAccess.ReadWrite,
+            FileShare.ReadWrite | FileShare.Delete);
         var fh = new byte[WalFrameHeaderSize];
         var ep = new byte[PageSize];
 

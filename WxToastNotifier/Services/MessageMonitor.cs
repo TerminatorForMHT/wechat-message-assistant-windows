@@ -94,6 +94,8 @@ public sealed class MessageMonitor
 
     private void Poll()
     {
+        RefreshMuteFlags(); // 每轮先刷新免打扰标记，切换免打扰后能及时生效
+
         var sessions = _db.ReadSessions();
         var newMessages = new List<NewMessage>();
 
@@ -117,30 +119,40 @@ public sealed class MessageMonitor
             if (!isNew) continue;
             if (string.IsNullOrWhiteSpace(s.Summary)) continue;
 
-            bool muted = _muteFlags.TryGetValue(s.Username, out var m) && m;
-            if (muted) continue; // 免打扰会话不推送
+            if (_muteFlags.TryGetValue(s.Username, out var m) && m)
+            {
+                _log($"[免打扰] 跳过 {ResolveTitle(s)}");
+                continue;
+            }
 
             var title = ResolveTitle(s);
             newMessages.Add(new NewMessage(s.Username, title, s.Summary, s.LastTimestamp));
         }
 
-        // 每隔一段时间刷新免打扰与联系人
-        if (++_refreshCounter % 60 == 0)
-        {
-            RefreshMuteFlags();
-        }
-
+        var selfFlags = _db.ReadSelfSenderLatest(newMessages.Select(m => m.Username).ToList());
         foreach (var msg in newMessages)
         {
+            if (selfFlags.TryGetValue(msg.Username, out var self) && self)
+                continue; // 自己发出的消息不推送
+
             _toast.Show(msg);
             NewMessage?.Invoke(msg);
             _log($"[通知] {msg.DisplayName}: {msg.Content}");
         }
     }
 
-    private int _refreshCounter;
+    private int _lastMutedCount = -1;
 
-    private void RefreshMuteFlags() => _muteFlags = _db.ReadMuteFlags();
+    private void RefreshMuteFlags()
+    {
+        _muteFlags = _db.ReadMuteFlags();
+        var muted = _muteFlags.Count(m => m.Value);
+        if (muted != _lastMutedCount)
+        {
+            _lastMutedCount = muted;
+            _log($"✓ 免打扰会话已加载：{muted} 个");
+        }
+    }
 
     private string ResolveTitle(SessionRecord s)
     {

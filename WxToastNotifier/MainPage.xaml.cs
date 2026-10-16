@@ -52,6 +52,10 @@ public sealed partial class MainPage : Page
         {
             Log("ℹ️ 未配置密钥：启动时将自动从微信进程内存提取（4.1+ WCDB，无需 passphrase/keysFile）");
         }
+
+        // 临时自动开始监听（实测用）
+        Log("ℹ️ 自动开始监听…");
+        DispatcherQueue.TryEnqueue(() => StartButton_Click(this, new RoutedEventArgs()));
     }
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)
@@ -119,12 +123,16 @@ public sealed partial class MainPage : Page
         MuteColumn = string.IsNullOrWhiteSpace(MuteColumnBox.Text) ? null : MuteColumnBox.Text.Trim(),
     };
 
+    private static readonly string LogFilePath = Path.Combine(Path.GetTempPath(), "WxToastNotifier.log");
+
     private void Log(string line)
     {
         var stamp = DateTime.Now.ToString("HH:mm:ss");
+        var entry = $"[{stamp}] {line}";
+        try { File.AppendAllText(LogFilePath, entry + Environment.NewLine); } catch { }
         DispatcherQueue.TryEnqueue(() =>
         {
-            _logSb.AppendLine($"[{stamp}] {line}");
+            _logSb.AppendLine(entry);
             LogText.Text = _logSb.ToString();
             LogText.UpdateLayout();
         });
