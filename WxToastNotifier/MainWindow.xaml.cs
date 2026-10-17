@@ -40,17 +40,17 @@ public sealed partial class MainWindow : Window
         _trayIcon = new TaskbarIcon
         {
             ToolTipText = "微信消息助手",
-            IconSource = new BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"))),
+            IconSource = new BitmapImage(new Uri("ms-appx:///Assets/AppIcon.ico")),
             NoLeftClickDelay = true,
             LeftClickCommand = new RelayCommand(ShowFromTray),
             ContextMenuMode = ContextMenuMode.SecondWindow
         };
 
         var menu = new MenuFlyout();
-        var showItem = new MenuFlyoutItem { Text = "显示主窗口" };
+        var showItem = new MenuFlyoutItem { Text = "显示主窗口", Icon = new SymbolIcon(Symbol.NewWindow) };
         showItem.Click += (_, _) => ShowFromTray();
 
-        var exitItem = new MenuFlyoutItem { Text = "退出" };
+        var exitItem = new MenuFlyoutItem { Text = "退出", Icon = new SymbolIcon(Symbol.Cancel) };
         exitItem.Click += (_, _) => ExitApplication();
 
         menu.Items.Add(showItem);
@@ -58,7 +58,7 @@ public sealed partial class MainWindow : Window
         menu.Items.Add(exitItem);
 
         _trayIcon.ContextFlyout = menu;
-        _trayIcon.ForceCreate();
+        _trayIcon.ForceCreate(false);
     }
 
     private void SetupCloseToTray()
