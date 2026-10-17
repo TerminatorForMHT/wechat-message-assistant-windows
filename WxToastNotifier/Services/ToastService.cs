@@ -1,46 +1,39 @@
-using Microsoft.Windows.AppNotifications;
-using Microsoft.Windows.AppNotifications.Builder;
+using Windows.Data.Xml.Dom;
+using Windows.UI.Notifications;
 using WxToastNotifier.Models;
 
 namespace WxToastNotifier.Services;
 
 /// <summary>
-/// 通过 Windows App SDK 的 AppNotification 把消息推送到系统通知中心（Toast）。
+/// 通过 WinRT 的 ToastNotificationManager 把消息推送到系统通知中心（Toast）。
+/// 与 PowerToys LightSwitch 同款实现：MSIX 打包下无需 app 通知 COM server 注册。
 /// </summary>
 public sealed class ToastService
 {
-    public bool IsRegistered { get; private set; }
+    public bool IsRegistered => true;
     public string? LastError { get; private set; }
 
+    /// <summary>ToastNotificationManager 即时触发，无需预先注册；保留此方法以兼容调用方。</summary>
     public void Register()
     {
-        if (IsRegistered) return;
-        try
-        {
-            AppNotificationManager.Default.Register();
-            IsRegistered = true;
-            LastError = null;
-        }
-        catch (Exception ex)
-        {
-            LastError = ex.Message;
-        }
+        LastError = null;
     }
 
     public void Show(NewMessage msg)
     {
-        Register();
-        if (!IsRegistered) return;
-
         try
         {
-            var builder = new AppNotificationBuilder()
-                .AddArgument("username", msg.Username)
-                .AddText(msg.DisplayName)
-                .AddText(msg.Content);
+            var title = string.IsNullOrWhiteSpace(msg.DisplayName) ? "微信消息" : msg.DisplayName;
+            var content = msg.Content ?? "";
 
-            var notification = builder.BuildNotification();
-            AppNotificationManager.Default.Show(notification);
+            var xml = ToastNotificationManager.GetTemplateContent(ToastTemplateType.ToastText02);
+            var texts = xml.GetElementsByTagName("text");
+            texts[0].AppendChild(xml.CreateTextNode(title));
+            texts[1].AppendChild(xml.CreateTextNode(content));
+
+            var toast = new ToastNotification(xml);
+            ToastNotificationManager.CreateToastNotifier().Show(toast);
+            LastError = null;
         }
         catch (Exception ex)
         {
