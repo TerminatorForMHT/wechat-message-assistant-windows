@@ -51,6 +51,13 @@ installer_output/
 *.exe
 *.msi
 
+# .NET (C# WinUI3)
+WxToastNotifier/bin/
+WxToastNotifier/obj/
+*.user
+*.pfx
+.vs/
+
 # ��־�ļ�
 *.log
 
