@@ -27,8 +27,14 @@ public sealed class WeChatDatabase
 
     private readonly string _dbStorage;
     private readonly KeySet _keys;
+
+    /// <summary>微信 db_storage 源目录（用于文件变化监控触发即时推送）。</summary>
+    public string DbStorage => _dbStorage;
     private readonly AppConfig _config;
     private readonly string _tempRoot;
+
+    /// <summary>解密缓存：relDb → (db/wal 大小与时间戳)，用于跳过未变化的库、避免每轮重复解密。</summary>
+    private readonly Dictionary<string, (long DbSize, long WalSize, DateTime DbMtime, DateTime WalMtime)> _decryptCache = new(StringComparer.Ordinal);
 
     public WeChatDatabase(string dbStorage, KeySet keys, AppConfig config)
     {
@@ -64,12 +70,26 @@ public sealed class WeChatDatabase
         var safeName = relDb.Replace('\\', '_').Replace('/', '_');
         var dest = Path.Combine(_tempRoot, safeName);
 
-        WeChatCrypto.FullDecrypt(src, dest, key);
-
+        var dbInfo = new FileInfo(src);
         var wal = src + "-wal";
-        if (File.Exists(wal))
+        var walInfo = File.Exists(wal) ? new FileInfo(wal) : null;
+        var dbMtime = dbInfo.LastWriteTimeUtc;
+        var walMtime = walInfo?.LastWriteTimeUtc ?? DateTime.MinValue;
+
+        // 源文件（db + wal）未变化时复用已解密的临时文件，避免每轮轮询重复做完整解密
+        if (File.Exists(dest) &&
+            _decryptCache.TryGetValue(relDb, out var c) &&
+            c.DbSize == dbInfo.Length && c.WalSize == (walInfo?.Length ?? 0) &&
+            c.DbMtime == dbMtime && c.WalMtime == walMtime)
+        {
+            return dest;
+        }
+
+        WeChatCrypto.FullDecrypt(src, dest, key);
+        if (walInfo != null)
             WeChatCrypto.DecryptWal(wal, dest, key);
 
+        _decryptCache[relDb] = (dbInfo.Length, walInfo?.Length ?? 0, dbMtime, walMtime);
         return dest;
     }
 
