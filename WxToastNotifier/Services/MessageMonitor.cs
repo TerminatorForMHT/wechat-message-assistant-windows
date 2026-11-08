@@ -20,6 +20,7 @@ public sealed class MessageMonitor
     private Dictionary<string, long> _lastSeen = new(StringComparer.Ordinal);
     private Dictionary<string, bool> _muteFlags = new(StringComparer.Ordinal);
     private Dictionary<string, ContactEntry> _contacts = new(StringComparer.Ordinal);
+    private readonly AvatarService _avatars;
 
     /// <summary>已推送过的「会话|时间戳」组合，防止同一条消息被重复推送。</summary>
     private readonly HashSet<string> _notified = new(StringComparer.Ordinal);
@@ -42,6 +43,7 @@ public sealed class MessageMonitor
         _db = db;
         _toast = toast;
         _log = log;
+        _avatars = new AvatarService(log);
         _ = intervalSeconds; // 参数保留以兼容调用方；本实现采用 30ms 文件变化检测
     }
 
@@ -64,6 +66,7 @@ public sealed class MessageMonitor
             _log($"会话表列：{string.Join(", ", _db.SessionColumns)}");
 
             _contacts = _db.ReadContacts();
+            _avatars.Refresh(_contacts.Values); // 启动时本地刷新一次头像映射，缺失的后台下载
             RefreshMuteFlags();
             InitializeBaseline();
             SyncSignature();
@@ -206,7 +209,7 @@ public sealed class MessageMonitor
             }
 
             var msg = new NewMessage(s.Username, ResolveTitle(s), s.Summary!, s.LastTimestamp);
-            _toast.Show(msg);
+            _toast.Show(msg, _avatars.TryGet(s.Username));
             NewMessage?.Invoke(msg);
             _log($"[通知] {msg.DisplayName}: {msg.Content}");
         }

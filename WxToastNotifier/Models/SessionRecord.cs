@@ -13,7 +13,12 @@ public sealed record SessionRecord(
     bool Muted);
 
 /// <summary>contact.db 中 contact 表的一行（名称为 remark 优先，其次 nick_name）。</summary>
-public sealed record ContactEntry(string Username, string? NickName, string? Remark)
+public sealed record ContactEntry(
+    string Username,
+    string? NickName,
+    string? Remark,
+    string? SmallHeadUrl,
+    string? HeadImgMd5)
 {
     public string DisplayName => !string.IsNullOrWhiteSpace(Remark)
         ? Remark!

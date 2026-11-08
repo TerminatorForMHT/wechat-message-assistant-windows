@@ -178,13 +178,18 @@ public sealed class WeChatDatabase
             var path = DecryptToTemp(ContactDb);
             using var conn = OpenReadOnly(path);
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT username, nick_name, remark FROM contact WHERE username IS NOT NULL";
+            cmd.CommandText = "SELECT username, nick_name, remark, small_head_url, head_img_md5 FROM contact WHERE username IS NOT NULL";
             using var r = cmd.ExecuteReader();
             while (r.Read())
             {
                 var name = GetString(r, "username");
                 if (string.IsNullOrEmpty(name)) continue;
-                result[name] = new ContactEntry(name, GetString(r, "nick_name"), GetString(r, "remark"));
+                result[name] = new ContactEntry(
+                    name,
+                    GetString(r, "nick_name"),
+                    GetString(r, "remark"),
+                    GetString(r, "small_head_url"),
+                    GetString(r, "head_img_md5"));
             }
         }
         catch (Exception)

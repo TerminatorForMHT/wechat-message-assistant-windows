@@ -19,17 +19,33 @@ public sealed class ToastService
         LastError = null;
     }
 
-    public void Show(NewMessage msg)
+    public void Show(NewMessage msg, string? avatarPath = null)
     {
         try
         {
             var title = string.IsNullOrWhiteSpace(msg.DisplayName) ? "微信消息" : msg.DisplayName;
             var content = msg.Content ?? "";
 
-            var xml = ToastNotificationManager.GetTemplateContent(ToastTemplateType.ToastText02);
-            var texts = xml.GetElementsByTagName("text");
-            texts[0].AppendChild(xml.CreateTextNode(title));
-            texts[1].AppendChild(xml.CreateTextNode(content));
+            Windows.Data.Xml.Dom.XmlDocument xml;
+            if (!string.IsNullOrEmpty(avatarPath) && File.Exists(avatarPath))
+            {
+                // ToastGeneric + 圆形裁剪头像
+                xml = new Windows.Data.Xml.Dom.XmlDocument();
+                var src = System.Security.SecurityElement.Escape(new Uri(avatarPath).AbsoluteUri) ?? "";
+                xml.LoadXml(
+                    "<toast><visual><binding template=\"ToastGeneric\">" +
+                    $"<text>{System.Security.SecurityElement.Escape(title)}</text>" +
+                    $"<text>{System.Security.SecurityElement.Escape(content)}</text>" +
+                    $"<image placement=\"appLogoOverride\" hint-crop=\"circle\" src=\"{src}\"/>" +
+                    "</binding></visual></toast>");
+            }
+            else
+            {
+                xml = ToastNotificationManager.GetTemplateContent(ToastTemplateType.ToastText02);
+                var texts = xml.GetElementsByTagName("text");
+                texts[0].AppendChild(xml.CreateTextNode(title));
+                texts[1].AppendChild(xml.CreateTextNode(content));
+            }
 
             var toast = new ToastNotification(xml);
             ToastNotificationManager.CreateToastNotifier().Show(toast);
