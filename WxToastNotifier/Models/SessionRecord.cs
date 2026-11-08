@@ -9,6 +9,7 @@ public sealed record SessionRecord(
     string? Summary,
     string? LastSender,
     string? LastSenderDisplayName,
+    long LastMsgLocalId,
     bool Muted);
 
 /// <summary>contact.db 中 contact 表的一行（名称为 remark 优先，其次 nick_name）。</summary>

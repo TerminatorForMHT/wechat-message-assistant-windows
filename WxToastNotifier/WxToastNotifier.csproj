@@ -14,7 +14,7 @@
     <EnableMsixTooling>true</EnableMsixTooling>
     <WindowsPackageType>MSIX</WindowsPackageType>
     <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
-    <PackageCertificateThumbprint>A906CF861665D9C7FF316D9547DBCBEBD25742D2</PackageCertificateThumbprint>
+    <PackageCertificateThumbprint>F4F7442DC11F2BEAAF0694FDAD1992494FD1876B</PackageCertificateThumbprint>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>

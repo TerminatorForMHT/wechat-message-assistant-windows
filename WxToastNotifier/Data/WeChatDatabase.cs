@@ -19,11 +19,11 @@ public sealed class WeChatDatabase
     /// <summary>消息库（含各会话的 Msg_&lt;md5&gt; 表）。</summary>
     public const string MessageDb = @"message\message_0.db";
 
-    /// <summary>real_sender_id 等于该值表示「自己发出的消息」。</summary>
-    public const long SelfSenderId = 2;
-
     /// <summary>单聊消息免打扰位：contact.flag 的第 9 位（0x200）置位表示免打扰。群聊免打扰走 chat_room_notify 列。</summary>
     public const long MuteFlagBit = 0x200;
+
+    /// <summary>真实发送者 id → Name2Id.rowid 的映射已解析成功（等于自己的 rowid）。</summary>
+    public long? SelfSenderId { get; private set; }
 
     private readonly string _dbStorage;
     private readonly KeySet _keys;
@@ -123,7 +123,7 @@ public sealed class WeChatDatabase
         using var cmd = conn.CreateCommand();
         cmd.CommandText =
             "SELECT username, last_timestamp, last_msg_type, unread_count, summary, " +
-            "last_msg_sender, last_sender_display_name FROM SessionTable WHERE last_timestamp > 0";
+            "last_msg_sender, last_sender_display_name, last_msg_locald_id FROM SessionTable WHERE last_timestamp > 0";
 
         using var r = cmd.ExecuteReader();
         while (r.Read())
@@ -136,6 +136,7 @@ public sealed class WeChatDatabase
                 GetString(r, "summary"),
                 GetString(r, "last_msg_sender"),
                 GetString(r, "last_sender_display_name"),
+                GetInt64(r, "last_msg_locald_id"),
                 false));
         }
         return result;
@@ -201,36 +202,91 @@ public sealed class WeChatDatabase
     }
 
     /// <summary>
-    /// 判断给定会话「最新一条消息」是否由自己发出（message_0.db 的 real_sender_id == SelfSenderId）。
+    /// 判断给定会话「最新一条消息」是否由自己发出。
+    /// real_sender_id 是 message 库 Name2Id 表的 rowid，先按当前账号 username 解析出自己的 id 再比对。
     /// 仅在新消息出现时调用，避免每轮轮询都解密消息库。
+    /// 返回值不含某会话时表示无法判定（如消息表不存在），调用方需自行兜底。
     /// </summary>
-    public Dictionary<string, bool> ReadSelfSenderLatest(IReadOnlyCollection<string> usernames)
+    public Dictionary<string, bool> ReadSelfSenderLatest(IReadOnlyList<SessionRecord> sessions)
     {
         var result = new Dictionary<string, bool>(StringComparer.Ordinal);
-        if (usernames.Count == 0) return result;
+        if (sessions.Count == 0) return result;
 
         string path;
         try { path = DecryptToTemp(MessageDb); }
         catch (Exception) { return result; }
 
         using var conn = OpenReadOnly(path);
-        foreach (var uname in usernames)
+        EnsureSelfSenderId(conn);
+        if (SelfSenderId == null) return result;
+
+        foreach (var s in sessions)
         {
-            if (string.IsNullOrEmpty(uname)) continue;
-            result[uname] = false;
+            if (string.IsNullOrEmpty(s.Username)) continue;
             try
             {
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = $"SELECT real_sender_id FROM \"Msg_{Md5Hex(uname)}\" ORDER BY rowid DESC LIMIT 1";
-                var v = cmd.ExecuteScalar();
-                result[uname] = v != null && Convert.ToInt64(v) == SelfSenderId;
+                var table = $"Msg_{Md5Hex(s.Username)}";
+                long? sender = null;
+
+                // 优先按会话记录的 last_msg_locald_id 精确定位最后一条消息
+                if (s.LastMsgLocalId > 0)
+                {
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = $"SELECT real_sender_id FROM \"{table}\" WHERE local_id = @id LIMIT 1";
+                    cmd.Parameters.AddWithValue("@id", s.LastMsgLocalId);
+                    var v = cmd.ExecuteScalar();
+                    if (v != null) sender = Convert.ToInt64(v);
+                }
+
+                // 兜底：取表内最新一行
+                if (sender == null)
+                {
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = $"SELECT real_sender_id FROM \"{table}\" ORDER BY rowid DESC LIMIT 1";
+                    var v = cmd.ExecuteScalar();
+                    if (v != null) sender = Convert.ToInt64(v);
+                }
+
+                if (sender != null)
+                    result[s.Username] = sender.Value == SelfSenderId.Value;
             }
             catch (Exception)
             {
-                // 表不存在或结构异常时，默认视为非 self（不误过滤对方消息）
+                // 表不存在或结构异常时不做判定，交由调用方按 unread 兜底
             }
         }
         return result;
+    }
+
+    /// <summary>从 message 库 Name2Id 表解析当前账号的 real_sender_id（rowid）。解析失败保持 null。</summary>
+    private void EnsureSelfSenderId(SqliteConnection conn)
+    {
+        if (SelfSenderId != null) return;
+
+        var selfName = SelfUsernameFromDir();
+        if (string.IsNullOrEmpty(selfName)) return;
+
+        try
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT rowid FROM Name2Id WHERE user_name = @u LIMIT 1";
+            cmd.Parameters.AddWithValue("@u", selfName);
+            var v = cmd.ExecuteScalar();
+            if (v != null) SelfSenderId = Convert.ToInt64(v);
+        }
+        catch (Exception)
+        {
+            // Name2Id 不可用时放弃 self 判定
+        }
+    }
+
+    /// <summary>db_storage 所在目录名形如 wxid_xxx_后缀，去掉最后一个下划线后缀即为 contact/Name2Id 中的 username。</summary>
+    private string? SelfUsernameFromDir()
+    {
+        var dirName = Path.GetFileName(Path.GetDirectoryName(_dbStorage.TrimEnd('\\', '/')));
+        if (string.IsNullOrEmpty(dirName)) return null;
+        var lastUnderscore = dirName.LastIndexOf('_');
+        return lastUnderscore > 0 ? dirName[..lastUnderscore] : dirName;
     }
 
     /// <summary>

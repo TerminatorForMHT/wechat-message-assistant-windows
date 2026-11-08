@@ -43,14 +43,15 @@ public sealed partial class MainWindow : Window
             IconSource = new BitmapImage(new Uri("ms-appx:///Assets/AppIcon.ico")),
             NoLeftClickDelay = true,
             LeftClickCommand = new RelayCommand(ShowFromTray),
-            ContextMenuMode = ContextMenuMode.SecondWindow
+            // 原生弹出菜单：SecondWindow 模式下菜单宽度/字体渲染异常（文字被截断）
+            ContextMenuMode = ContextMenuMode.PopupMenu
         };
 
         var menu = new MenuFlyout();
-        var showItem = new MenuFlyoutItem { Text = "显示主窗口", Icon = new SymbolIcon(Symbol.NewWindow) };
+        var showItem = new MenuFlyoutItem { Text = "显示主窗口" };
         showItem.Click += (_, _) => ShowFromTray();
 
-        var exitItem = new MenuFlyoutItem { Text = "退出", Icon = new SymbolIcon(Symbol.Cancel) };
+        var exitItem = new MenuFlyoutItem { Text = "退出" };
         exitItem.Click += (_, _) => ExitApplication();
 
         menu.Items.Add(showItem);
@@ -72,6 +73,9 @@ public sealed partial class MainWindow : Window
     }
 
     private void HideToTray() => WindowExtensions.Hide(this);
+
+    /// <summary>供单实例重定向调用：从托盘恢复并前置主窗口。</summary>
+    public void Restore() => ShowFromTray();
 
     private void ShowFromTray()
     {

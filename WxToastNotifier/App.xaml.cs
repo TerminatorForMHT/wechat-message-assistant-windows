@@ -21,7 +21,7 @@ namespace WxToastNotifier;
 /// </summary>
 public partial class App : Application
 {
-    private Window? _window;
+    private MainWindow? _window;
     
     /// <summary>
     /// Initializes the singleton application object.  This is the first line of authored code
@@ -36,8 +36,23 @@ public partial class App : Application
     /// Invoked when the application is launched.
     /// </summary>
     /// <param name="args">Details about the launch request and process.</param>
-    protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
+    protected override async void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
+        // 单实例：再次启动时激活已有实例并退出本进程，避免双进程重复推送
+        var keyInstance = Microsoft.Windows.AppLifecycle.AppInstance.FindOrRegisterForKey("Main");
+        if (!keyInstance.IsCurrent)
+        {
+            var activatedArgs = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
+            await keyInstance.RedirectActivationToAsync(activatedArgs);
+            System.Diagnostics.Process.GetCurrentProcess().Kill();
+            return;
+        }
+
+        keyInstance.Activated += (_, _) =>
+        {
+            _window?.DispatcherQueue.TryEnqueue(() => _window.Restore());
+        };
+
         _window = new MainWindow();
         _window.Activate();
     }

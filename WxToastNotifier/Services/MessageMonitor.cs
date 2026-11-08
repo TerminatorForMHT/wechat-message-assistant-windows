@@ -16,9 +16,23 @@ public sealed class MessageMonitor
     private CancellationTokenSource? _cts;
     private long _lastSessionSig;
     private long _lastContactSig;
+    private long _startEpoch;
     private Dictionary<string, long> _lastSeen = new(StringComparer.Ordinal);
     private Dictionary<string, bool> _muteFlags = new(StringComparer.Ordinal);
     private Dictionary<string, ContactEntry> _contacts = new(StringComparer.Ordinal);
+
+    /// <summary>已推送过的「会话|时间戳」组合，防止同一条消息被重复推送。</summary>
+    private readonly HashSet<string> _notified = new(StringComparer.Ordinal);
+
+    /// <summary>聚合/占位会话：订阅号合集、服务号合集。它们与真实会话重复，且公众号文章推送也走这里，一律跳过。</summary>
+    private static readonly HashSet<string> AggregatorUsernames = new(StringComparer.Ordinal)
+    {
+        "brandsessionholder",
+        "brandservicesessionholder",
+    };
+
+    /// <summary>只推送监听启动之后到达的消息，容忍 120 秒时钟/写入偏差。</summary>
+    private const long HistoryGraceSeconds = 120;
 
     /// <summary>新消息事件（在后台线程触发，UI 需自行调度）。</summary>
     public event Action<NewMessage>? NewMessage;
@@ -37,6 +51,7 @@ public sealed class MessageMonitor
     {
         if (IsRunning) return;
         _cts = new CancellationTokenSource();
+        _startEpoch = DateTimeOffset.Now.ToUnixTimeSeconds();
         try
         {
             _toast.Register();
@@ -137,11 +152,13 @@ public sealed class MessageMonitor
         RefreshMuteFlags(); // 每轮先刷新免打扰标记，切换免打扰后能及时生效
 
         var sessions = _db.ReadSessions();
-        var newMessages = new List<NewMessage>();
+        var candidates = new List<SessionRecord>();
+        var minTs = _startEpoch - HistoryGraceSeconds;
 
         foreach (var s in sessions)
         {
             if (string.IsNullOrEmpty(s.Username)) continue;
+            if (AggregatorUsernames.Contains(s.Username)) continue;
 
             bool isNew;
             if (!_lastSeen.TryGetValue(s.Username, out var prevTs))
@@ -159,22 +176,36 @@ public sealed class MessageMonitor
             if (!isNew) continue;
             if (string.IsNullOrWhiteSpace(s.Summary)) continue;
 
+            // 跳过历史消息：打开/同步微信时批量刷入的旧消息时间戳早于监听启动时间
+            if (s.LastTimestamp < minTs) continue;
+
+            // 同一条消息只推一次
+            if (!_notified.Add($"{s.Username}|{s.LastTimestamp}")) continue;
+
             if (_muteFlags.TryGetValue(s.Username, out var m) && m)
             {
                 _log($"[免打扰] 跳过 {ResolveTitle(s)}");
                 continue;
             }
 
-            var title = ResolveTitle(s);
-            newMessages.Add(new NewMessage(s.Username, title, s.Summary, s.LastTimestamp));
+            candidates.Add(s);
         }
 
-        var selfFlags = _db.ReadSelfSenderLatest(newMessages.Select(m => m.Username).ToList());
-        foreach (var msg in newMessages)
-        {
-            if (selfFlags.TryGetValue(msg.Username, out var self) && self)
-                continue; // 自己发出的消息不推送
+        if (_notified.Count > 2000) _notified.Clear();
 
+        var selfFlags = _db.ReadSelfSenderLatest(candidates);
+        foreach (var s in candidates)
+        {
+            if (selfFlags.TryGetValue(s.Username, out var self))
+            {
+                if (self) continue; // 自己发出的消息不推送
+            }
+            else if (s.UnreadCount <= 0)
+            {
+                continue; // 无法判定发送者且无未读：要么是自己发的，要么已读，跳过
+            }
+
+            var msg = new NewMessage(s.Username, ResolveTitle(s), s.Summary!, s.LastTimestamp);
             _toast.Show(msg);
             NewMessage?.Invoke(msg);
             _log($"[通知] {msg.DisplayName}: {msg.Content}");
