@@ -12,10 +12,20 @@ public sealed class AvatarService
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(8) };
 
-    private readonly string _cacheDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "WxToastNotifier", "avatars");
+    private readonly string _cacheDir = Path.Combine(CacheRoot(), "avatars");
     private readonly Action<string> _log;
+
+    /// <summary>
+    /// 头像缓存根目录。打包应用必须放在 ApplicationData.LocalFolder（LocalState）下，
+    /// 这样 Toast 才能用 ms-appdata:///local/ 引用；LocalCache\Local 无法被 ms-appdata 访问。
+    /// </summary>
+    private static string CacheRoot()
+    {
+        try { return Windows.Storage.ApplicationData.Current.LocalFolder.Path; }
+        catch { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WxToastNotifier"); }
+    }
+
+    public string CacheDirectory => _cacheDir;
 
     /// <summary>username → 头像文件路径（仅缓存命中的入表）。</summary>
     private ConcurrentDictionary<string, string> _map = new(StringComparer.Ordinal);

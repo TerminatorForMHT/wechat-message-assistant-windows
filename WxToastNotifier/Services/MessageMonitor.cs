@@ -211,7 +211,8 @@ public sealed class MessageMonitor
             var msg = new NewMessage(s.Username, ResolveTitle(s), s.Summary!, s.LastTimestamp);
             _toast.Show(msg, _avatars.TryGet(s.Username));
             NewMessage?.Invoke(msg);
-            _log($"[通知] {msg.DisplayName}: {msg.Content}");
+            var avatarState = _toast.LastUsedAvatarSrc == null ? "无头像" : "含头像";
+            _log($"[通知] ({avatarState}) {msg.DisplayName}: {msg.Content}");
         }
     }
 
