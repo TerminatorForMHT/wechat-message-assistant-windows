@@ -4,10 +4,29 @@
 
 > 仅读取本地微信数据库做轮询，**不注入、不修改微信进程与文件**；解密输出全部写入系统临时目录，绝不改动微信原始数据。
 
+## 界面预览
+
+通知自带联系人圆形头像，正文即消息内容：
+
+<img src="src/md/弹窗.png" width="640" alt="Toast 通知带头像">
+
+桌面右下角弹出的实际效果：
+
+<img src="src/md/全屏弹窗效果.png" width="720" alt="全屏下的通知效果">
+
+通知中心里的消息列表（每条都带发送人头像）：
+
+<img src="src/md/消息列表.png" width="720" alt="通知中心消息列表">
+
+主窗口（配置 + 实时日志）：
+
+<img src="src/md/主窗口.png" width="720" alt="主窗口">
+
 ## 功能特性
 
+- **通知显示头像**：启动时按 `contact.small_head_url` 建立 username → 头像路径映射，缺失的并发后台下载；推送时只做字典查询，不拖慢速度。
 - **免打扰过滤**：群聊看 `contact.chat_room_notify`，单聊看 `contact.flag` 第 9 位（`0x200`），两者任一生效即静音。
-- **过滤自己发出的消息**：按 `message_0.db` 的 `real_sender_id == 2` 判定，避免自己被推送打断。
+- **过滤自己发出的消息**：`real_sender_id` 是 `message_*.db` 中 `Name2Id` 表的 rowid，按当前账号 username 动态解析出自己的 id 后比对（不再写死常量）；并用 `SessionTable.last_msg_locald_id` 精确定位会话最后一条消息。
 - **密钥自动提取**：基于 WCDB `Config.Cipher` 配置对象定位 + HMAC 校验（微信 4.1.15+），无需注入、无封号风险。
 - **数据库解密**：SQLCipher 解密 `session.db` / `contact.db` / `message_0.db` 到临时目录后只读分析。
 - **接近实时的推送**：30ms 轻量轮询检测 db 文件变化，变了才解密，追平原 Python 版的响应速度。
@@ -33,7 +52,7 @@
 2. 安装 MSIX 包：
 
    ```powershell
-   Add-AppxPackage -Path .\WxToastNotifier_2.0.0.0_x64.msix
+   Add-AppxPackage -Path .\WxToastNotifier_2.2.1.0_x64.msix
    ```
 
 3. 从「开始」菜单打开「WxToastNotifier」。
@@ -71,7 +90,7 @@ WxToastNotifier/
 ├── Data/WeChatDatabase.cs     数据库解密与读取、免打扰判定
 ├── Models/                    AppConfig、SessionRecord 等模型
 ├── Security/                  密钥提取（WeChatKeyExtractor）、解密（WeChatCrypto）、密钥提供（DbKeyProvider）
-└── Services/                  MessageMonitor（30ms 检测）、ToastService、WeChatProcessService
+└── Services/                  MessageMonitor（30ms 检测）、ToastService、AvatarService（头像缓存）、WeChatProcessService
 ```
 
 ## 构建
@@ -81,7 +100,7 @@ WxToastNotifier/
 dotnet build .\WxToastNotifier\WxToastNotifier.csproj -c Release -p:Platform=x64 -p:GenerateAppxPackageOnBuild=true
 
 # 产物位于
-# WxToastNotifier\AppPackages\WxToastNotifier_2.0.0.0_x64_Test\WxToastNotifier_2.0.0.0_x64.msix
+# WxToastNotifier\AppPackages\WxToastNotifier_2.2.1.0_x64_Test\WxToastNotifier_2.2.1.0_x64.msix
 ```
 
 ## 免责声明
