@@ -1,52 +1,78 @@
-# WxToastNotifier v2.0.0 发布说明
+# WxToastNotifier v2.2.1 — 微信 4.2 专属消息 Toast 通知
 
-微信消息助手（WxToastNotifier）：非侵入式地把微信中「非免打扰」会话的新消息转发到 Windows 通知中心（Toast）。本版本是对原 Python 版的 **C# + WinUI3 完全重写**，核心能力与 Python 版保持一致，并修复了单聊免打扰、新增托盘等改进。
+一个 Windows 10/11 下把 **微信新消息** 转到 **系统 Toast 通知** 的小工具。
+不抢微信窗口，不重复推送自己发的消息，不推公众号文章，通知里带 **联系人圆形头像**。
+微信 4.1 / 4.2 已经适配，WCDB 密钥直接从微信进程内存提取，**不需要 passphrase，不需要 all_keys.json**。
 
-## 核心功能（继承自 Python 版）
+[![GitHub stars](https://img.shields.io/github/stars/TerminatorForMHT/wechat-message-assistant-windows?style=social)](https://github.com/TerminatorForMHT/wechat-message-assistant-windows)
 
-- **密钥自动提取**：从微信进程内存扫描定位 WCDB Config.Cipher 配置对象，解码并 HMAC 校验得到数据库密钥，无需注入微信、不修改任何微信文件，提取到的密钥全部通过 HMAC 交叉验证。
-- **数据库解密**：按会话/联系人/消息库分别解密到临时目录，绝不改动微信原始数据。
-- **新消息监控与 Toast 推送**：轮询消息库检测新消息，转发到 Windows 通知中心（AppNotification 原生 Toast）。
-- **消息免打扰过滤**：群聊按 `contact.chat_room_notify`、单聊按 `contact.flag` 第 9 位（`0x200`）判定，被静音的会话不推送。
-- **过滤自己发出的消息**：按 `real_sender_id == 2` 识别自己发出的消息，避免推送自己发送的内容。
-- **多账户识别**：设备登录多个微信账户时，自动选择写入时间最新的数据库作为当前账户。
+## 下载
 
-## 相对 Python 版的变化
+| 文件 | 说明 |
+|------|------|
+| **WxToastNotifier_2.2.1.0_x64.msix** | 安装包，直接双击安装 |
+| **Install.ps1** | 一键安装脚本（含证书导入） |
+| **WxToastNotifier.cer** | 自签名证书（安装前可选导入受信任根） |
 
-- **完全重写为 C# + WinUI3**：不再依赖 Python 运行时，打包为单个 MSIX，安装与分发更简单。
-- **最小化到托盘**：关闭窗口隐藏到系统托盘（不退出进程）；托盘右键菜单为 WinUI3 原生样式。
-- **微信状态检测与一键拉起**：启动时检测微信是否运行，未运行时显示「打开微信」按钮一键拉起。
-- **当前账户显示微信号**：优先显示 `contact.alias`（微信号），无微信号回退昵称，便于区分多账户。
-- **单聊免打扰修复**：单聊免打扰此前未生效（字段仅对群聊存在），现改读 `contact.flag` 第 9 位。
-- **免打扰切换立即生效**：免打扰标记每轮轮询前刷新，不再有缓存延迟。
-- **修复打包后通知失效**：移除 Release 的 IL 裁剪（原会破坏 WinRT 投影，导致 MSIX 下 Toast 注册报 `Unspecified error`），通知推送恢复正常。
+## 特性
 
-## 安装说明
+- 🔔 **系统级 Toast 通知**，带圆形联系人头像
+- 🧠 **自动识别自己发出的消息**，不重复推送
+- 🔕 **免打扰会话自动跳过**
+- 🕑 **微信启动后的历史同步消息自动过滤**
+- 🚫 跳过 `brandsessionholder` 聚合会话，**不推公众号文章**、不推服务号重复
+- 🔑 **WCDB 密钥内存提取**，无需手动配置 passphrase / all_keys.json
+- 👤 **头像本地缓存 + 后台并发下载**，推送零额外耗时
+- 🪟 **WinUI 3 / Windows App SDK / H.NotifyIcon** 构建，单实例，托盘常驻
 
-本版本使用**自签名证书**打包为 MSIX，首次安装前需先信任证书：
+## 安装
 
-1. （管理员）把证书装到「本地计算机」的「受信任的根证书颁发机构」——**必须是机器级**，装到「当前用户」会导致安装报错 `0x800B0109`：
-   ```powershell
-   # 方式一（推荐，最简单）：
-   certutil -addstore -f Root .\WxToastNotifier.cer
-   # 方式二：
-   Import-Certificate -FilePath .\WxToastNotifier.cer -CertStoreLocation Cert:\LocalMachine\Root
-   ```
-   或双击 `WxToastNotifier.cer` → 存储位置选「本地计算机」→ 选「将所有证书放入下列存储」→ 浏览到「受信任的根证书颁发机构」。
-2. 双击 `WxToastNotifier_2.0.0.0_x64.msix` 安装，或：
-   ```powershell
-   Add-AppxPackage -Path .\WxToastNotifier_2.0.0.0_x64.msix
-   ```
+双击 `.msix` 即可。首次安装如果提示证书不受信任：
 
-> 证书为本地自签名，仅用于侧载（sideload）分发；如需商店发布，请改用受信任的代码签名证书。
+```powershell
+# 管理员 PowerShell
+Import-Certificate .\WxToastNotifier.cer -CertStoreLocation Cert:\LocalMachine\Root
+Import-Certificate .\WxToastNotifier.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople
+```
 
-## 产物
+或直接运行仓库里的 `Install.ps1`。
 
-- 安装包：`WxToastNotifier/AppPackages/WxToastNotifier_2.0.0.0_x64_Test/WxToastNotifier_2.0.0.0_x64.msix`
-- 签名证书（公钥）：`WxToastNotifier/WxToastNotifier.cer`
-- 签名证书（私钥，仅构建机保留，勿分发）：`WxToastNotifier/WxToastNotifier.pfx`
+## 使用
 
-## 使用前提
+1. 启动微信（必须，工具会扫描微信进程拿到数据库密钥）
+2. 运行 WxToastNotifier
+3. 点「开始监听」→ 工具会自动扫描 `db_storage`、解密数据库副本到临时目录、建立会话基线
+4. 托盘图标常驻，退出微信后工具会停止推送
 
-- Windows 10 1809（17763）及以上。
-- 本机已登录微信（4.1+），数据库密钥在启动监听时自动提取。
+## 工作原理（给爱折腾的人）
+
+微信 4.0 起聊天记录在 `db_storage` 里用 WCDB 加密，`message/message_*.db`、`session/session.db`、`contact/contact.db` 是三个核心。这个工具：
+
+1. 扫描所有 `Weixin.exe` 进程的内存，定位 `Config.Cipher` 全局对象，直接读出每个数据库的 `(salt, enc_key)` —— 微信自己的内存里就有，不用 passphrase
+2. 用 Cipher 解密到临时目录，只读副本，**原始库文件不会被改动**
+3. 2 秒轮询 `SessionTable.last_timestamp`，配合 unread_count / real_sender_id / last_msg_locald_id 判定是否有新消息
+4. 进程内 `(username, last_timestamp)` 去重 + 进程外 AppInstance 单实例，不会重复推
+
+## 代码
+
+仓库：https://github.com/TerminatorForMHT/wechat-message-assistant-windows
+
+欢迎提 Issue / PR，尤其是数据库 schema 变化的反馈。
+
+## v2.2.1 更新日志
+
+- ✨ Toast 通知新增 **联系人圆形头像**（本地缓存 + 后台并发下载）
+- 🔧 修复 Toast 中头像不显示的问题（MSIX 环境下必须用 `ms-appdata:///local/`，不能用 `file://`）
+- 🚀 启动时刷新一次 username → 头像路径映射，推送路径只做字典查询
+- 📦 头像缓存目录迁到 LocalState 以匹配 `ms-appdata:///local/`
+- 代码路径、ToastService、AvatarService、MessageMonitor 都加了相应的日志输出
+
+## v2.1.1 更新日志
+
+- 🔐 **单实例保护**（AppInstance），解决双进程导致的同一条消息推两遍
+- 🎯 **自己发送的消息不再推送**（用 `Name2Id.user_name` 动态解析 real_sender_id，不再写死）
+- 📅 **历史同步消息门限**：只推送监听启动之后到达的消息
+- 🛑 **过滤聚合会话** `brandsessionholder` / `brandservicesessionholder`，不推公众号文章、不推服务号同消息双份
+- 🔕 免打扰会话在 `contact.chat_room_notify` 列自动识别
+- 🎨 托盘菜单从 SecondWindow 改为 PopupMenu，修复菜单文字截断 / 渲染异常
+- 🌟 AppIcon.ico 重制，去掉深色底板和边框
