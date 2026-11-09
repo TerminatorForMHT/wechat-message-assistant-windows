@@ -52,7 +52,7 @@
 2. 安装 MSIX 包：
 
    ```powershell
-   Add-AppxPackage -Path .\WxToastNotifier_2.2.3.0_x64.msix
+   Add-AppxPackage -Path .\WxToastNotifier_2.2.7.0_x64.msix
    ```
 
 3. 从「开始」菜单打开「WxToastNotifier」。
@@ -100,7 +100,7 @@ WxToastNotifier/
 dotnet build .\WxToastNotifier\WxToastNotifier.csproj -c Release -p:Platform=x64 -p:GenerateAppxPackageOnBuild=true
 
 # 产物位于
-# WxToastNotifier\AppPackages\WxToastNotifier_2.2.3.0_x64_Test\WxToastNotifier_2.2.3.0_x64.msix
+# WxToastNotifier\AppPackages\WxToastNotifier_2.2.7.0_x64_Test\WxToastNotifier_2.2.7.0_x64.msix
 ```
 
 ## 免责声明

@@ -59,6 +59,22 @@ Import-Certificate .\WxToastNotifier.cer -CertStoreLocation Cert:\LocalMachine\T
 
 欢迎提 Issue / PR，尤其是数据库 schema 变化的反馈。
 
+## v2.2.7 更新日志
+
+- 📐 图标内容铺满画布（去掉人为透明留白），任务栏/开始菜单里与其他系统图标大小一致
+
+## v2.2.6 更新日志
+
+- 🔍 图标整体放大约 1.23 倍，减小透明边距
+
+## v2.2.5 更新日志
+
+- 🖼️ 同时提供 `altform-unplated` 与 `altform-lightunplated` 两套共 18 档尺寸资源，修复深色/浅色主题下图标出现底板边框的问题
+
+## v2.2.4 更新日志
+
+- 🗂️ 补齐 `Square44x44Logo` 各 targetsize 的 unplated 资源，避免系统回退到 plated 资源而加底板
+
 ## v2.2.3 更新日志
 
 - 🌙 托盘菜单跟随系统深浅色（`SetPreferredAppMode` / `AllowDarkModeForWindow`），切换主题后重新打开菜单即生效
