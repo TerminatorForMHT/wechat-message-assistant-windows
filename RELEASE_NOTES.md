@@ -59,6 +59,16 @@ Import-Certificate .\WxToastNotifier.cer -CertStoreLocation Cert:\LocalMachine\T
 
 欢迎提 Issue / PR，尤其是数据库 schema 变化的反馈。
 
+## v2.2.3 更新日志
+
+- 🌙 托盘菜单跟随系统深浅色（`SetPreferredAppMode` / `AllowDarkModeForWindow`），切换主题后重新打开菜单即生效
+
+## v2.2.2 更新日志
+
+- 🖱️ 托盘图标与右键菜单改为原生 `Shell_NotifyIcon` + `TrackPopupMenu`，彻底解决 H.NotifyIcon 两种菜单模式的问题（SecondWindow 文字截断、PopupMenu 点击无响应，退出无效）
+- 🔁 监听资源管理器重启（`TaskbarCreated`）自动恢复托盘图标
+- 🗑️ 移除 H.NotifyIcon 依赖
+
 ## v2.2.1 更新日志
 
 - ✨ Toast 通知新增 **联系人圆形头像**（本地缓存 + 后台并发下载）

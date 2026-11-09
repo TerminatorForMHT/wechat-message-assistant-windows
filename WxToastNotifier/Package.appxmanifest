@@ -12,7 +12,7 @@
   <Identity
     Name="6CA725C1-33CD-47A4-8B82-83753F2478B2"
     Publisher="CN=WxToastNotifier"
-    Version="2.2.1.0" />
+    Version="2.2.3.0" />
 
   <mp:PhoneIdentity PhoneProductId="6CA725C1-33CD-47A4-8B82-83753F2478B2" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 

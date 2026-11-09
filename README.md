@@ -1,4 +1,4 @@
-# 微信消息助手（WxToastNotifier）
+﻿# 微信消息助手（WxToastNotifier）
 
 非侵入地将微信（Windows 版 4.1+）中未被免打扰的新消息，转发到 Windows 系统 Toast 通知中心。项目已由最初的 Python 版本**整体重写为 C# + WinUI 3**，以 MSIX 打包分发。
 
@@ -52,7 +52,7 @@
 2. 安装 MSIX 包：
 
    ```powershell
-   Add-AppxPackage -Path .\WxToastNotifier_2.2.1.0_x64.msix
+   Add-AppxPackage -Path .\WxToastNotifier_2.2.3.0_x64.msix
    ```
 
 3. 从「开始」菜单打开「WxToastNotifier」。
@@ -100,7 +100,7 @@ WxToastNotifier/
 dotnet build .\WxToastNotifier\WxToastNotifier.csproj -c Release -p:Platform=x64 -p:GenerateAppxPackageOnBuild=true
 
 # 产物位于
-# WxToastNotifier\AppPackages\WxToastNotifier_2.2.1.0_x64_Test\WxToastNotifier_2.2.1.0_x64.msix
+# WxToastNotifier\AppPackages\WxToastNotifier_2.2.3.0_x64_Test\WxToastNotifier_2.2.3.0_x64.msix
 ```
 
 ## 免责声明
